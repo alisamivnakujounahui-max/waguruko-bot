@@ -3,13 +3,12 @@ from threading import Thread
 from datetime import timedelta
 from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
-from aiogram.types import BotCommand, ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ChatPermissions
 
-# --- СЕРВЕР ---
+# --- СЕРВЕР ДЛЯ КРОНА ---
 app = Flask('')
 @app.route('/')
-def home(): return "Waguruko Mega Engine 7.0 Live!"
+def home(): return "Waguruko Engine 8.0 Live!"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run).start()
 
@@ -19,47 +18,63 @@ OWNER_ID = 7799004635
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# База данных
 user_data = {} 
 admins = [OWNER_ID] 
 
 def check_user(uid, name):
     if uid not in user_data:
-        user_data[uid] = {"name": name, "exp": 0, "partner": None, "m_req": None, "last_date": 0, "warns": 0}
+        user_data[uid] = {"name": name, "exp": 0, "cake": 0, "last_cake": 0, "warns": 0}
+    if uid == OWNER_ID:
+        user_data[uid]["exp"] = 999999
 
-# --- МЕНЮ (КНОПКИ) ---
-def main_menu():
+# --- УМНОЕ МЕНЮ ---
+def get_main_menu(uid):
     kb = [
         [InlineKeyboardButton(text="🎭 РП Список", callback_data="rp_list"),
-         InlineKeyboardButton(text="❤️ Свидание", callback_data="go_date")],
+         InlineKeyboardButton(text="🍰 Скушать тортик", callback_data="eat_cake")],
         [InlineKeyboardButton(text="👤 Профиль", callback_data="my_profile"),
-         InlineKeyboardButton(text="👑 Любимчики", callback_data="show_admins")],
-        [InlineKeyboardButton(text="🏆 Рейтинг", callback_data="show_top"),
-         InlineKeyboardButton(text="🛡 Админка", callback_data="admin_help")],
-        [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_menu")]
+         InlineKeyboardButton(text="🏆 Топ тортиков", callback_data="cake_top")]
     ]
+    # Показываем админку только избранным
+    if uid in admins or uid == OWNER_ID:
+        kb.append([InlineKeyboardButton(text="👑 Любимчики", callback_data="show_admins"),
+                   InlineKeyboardButton(text="🛡 Админка", callback_data="admin_help")])
+    
+    kb.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="close_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-# --- ОБРАБОТЧИКИ CALLBACK ---
+# --- ОБРАБОТЧИКИ ---
 
-@dp.callback_query(F.data == "close_menu")
-async def close_menu(call: CallbackQuery):
-    await call.message.delete()
+@dp.callback_query(F.data == "eat_cake")
+async def cake_logic(call: CallbackQuery):
+    uid = call.from_user.id
+    check_user(uid, call.from_user.first_name)
+    now = time.time()
+    if now - user_data[uid]["last_cake"] < 3600: # Раз в час
+        return await call.answer("🔧 Животик еще полон! Подожди часик.", show_alert=True)
+    
+    change = random.randint(-5, 15)
+    user_data[uid]["cake"] += change
+    user_data[uid]["last_cake"] = now
+    
+    msg = f"🍰 Ты скушал кусочек тортика!\nРезультат: <b>{'+' if change > 0 else ''}{change} см</b>\nОбщий размер: <b>{user_data[uid]['cake']} см</b>"
+    await call.message.edit_text(msg, parse_mode="HTML", reply_markup=get_main_menu(uid))
+
+@dp.callback_query(F.data == "cake_top")
+async def show_cake_top(call: CallbackQuery):
+    sorted_cakes = sorted(user_data.items(), key=lambda x: x[1].get('cake', 0), reverse=True)[:10]
+    text = "<b>🍰 Топ любителей тортиков:</b>\n\n"
+    for i, (uid, data) in enumerate(sorted_cakes, 1):
+        text += f"{i}. {data['name']} — {data.get('cake', 0)} см\n"
+    await call.message.edit_text(text, parse_mode="HTML", reply_markup=get_main_menu(call.from_user.id))
 
 @dp.callback_query(F.data == "show_admins")
 async def call_admins(call: CallbackQuery):
     text = "<b>👑 Любимчики Каоруко:</b>\n\n"
     for adm_id in admins:
-        name = user_data.get(adm_id, {}).get("name", f"ID: {adm_id}")
-        tag = "⭐ Создатель" if adm_id == OWNER_ID else "💎 Помощник"
-        text += f"• <b>{name}</b> [{tag}]\n"
-    await call.message.edit_text(text, parse_mode="HTML", reply_markup=main_menu())
-
-@dp.callback_query(F.data == "rp_list")
-async def rp_list_call(call: CallbackQuery):
-    text = ("<b>🎭 РП Команды (реплаем):</b>\n"
-            "обнять, поцеловать, кусь, вьебать, лик, сон, танец, ням, чмок, игра, секс, щекотка, массаж, ванна, подарок, гладить, злиться, грустить, радоваться, хвалить, обидеться, подмигнуть, испугаться")
-    await call.message.edit_text(text, parse_mode="HTML", reply_markup=main_menu())
+        name = user_data.get(adm_id, {}).get("name", f"Юзер {adm_id}")
+        text += f"• {name}\n"
+    await call.message.edit_text(text, parse_mode="HTML", reply_markup=get_main_menu(call.from_user.id))
 
 @dp.callback_query(F.data == "my_profile")
 async def profile_call(call: CallbackQuery):
@@ -67,106 +82,45 @@ async def profile_call(call: CallbackQuery):
     check_user(uid, call.from_user.first_name)
     u = user_data[uid]
     role = "👑 Создатель" if uid == OWNER_ID else ("🛡 Админ" if uid in admins else "👤 Участник")
-    res = f"<b>『 🌸 𝓦𝓪𝓰𝓾𝓻𝓲𝓴𝓸 』</b>\n\n👤 <b>Имя:</b> {u['name']}\n💠 <b>Опыт:</b> {u['exp']}\n🎖 <b>Роль:</b> {role}\n⚠️ <b>Варны:</b> {u['warns']}/3"
-    await call.message.edit_text(res, parse_mode="HTML", reply_markup=main_menu())
+    res = f"<b>『 🌸 𝓦𝓪𝓰𝓾𝓻𝓲𝓴𝓸 』</b>\n\n👤 <b>Имя:</b> {u['name']}\n💠 <b>EXP:</b> {u['exp']}\n🎖 <b>Роль:</b> {role}\n🍰 <b>Тортик:</b> {u['cake']} см"
+    await call.message.edit_text(res, parse_mode="HTML", reply_markup=get_main_menu(uid))
 
-@dp.callback_query(F.data == "go_date")
-async def date_call(call: CallbackQuery):
-    uid = call.from_user.id
-    check_user(uid, call.from_user.first_name)
-    now = time.time()
-    if now - user_data[uid]["last_date"] < 14400:
-        return await call.answer("⏳ Каоруко еще занята! Приходи позже.", show_alert=True)
-    user_data[uid]["last_date"] = now
-    if random.randint(1, 100) <= 65:
-        user_data[uid]["exp"] += 25
-        await call.message.edit_text("🍰 <b>Успех!</b> Вы чудесно провели время в кафе.\n<b>+25 EXP</b>", parse_mode="HTML", reply_markup=main_menu())
-    else:
-        user_data[uid]["exp"] -= 5
-        await call.message.edit_text("🌧 <b>Неудача...</b> Пошел дождь, и настроение испортилось.\n<b>-5 EXP</b>", parse_mode="HTML", reply_markup=main_menu())
+@dp.callback_query(F.data == "close_menu")
+async def close_menu(call: CallbackQuery): await call.message.delete()
 
-@dp.callback_query(F.data == "show_top")
-async def top_call(call: CallbackQuery):
-    if not user_data: return await call.answer("Топ пока пуст!")
-    sorted_users = sorted(user_data.items(), key=lambda x: x[1]['exp'], reverse=True)[:5]
-    top_text = "<b>🏆 Топ любимчиков:</b>\n\n"
-    for i, (uid, data) in enumerate(sorted_users, 1):
-        top_text += f"{i}. {data['name']} — {data['exp']} EXP\n"
-    await call.message.edit_text(top_text, parse_mode="HTML", reply_markup=main_menu())
+# --- ПРИВЕТСТВИЕ С ГИФКОЙ ---
+@dp.message(F.text.casefold().in_({"приветик вагури", "вагури меню", "меню"}))
+async def msg_menu(m: types.Message):
+    uid = m.from_user.id
+    check_user(uid, m.from_user.first_name)
+    # Прямая ссылка на гифку с Вагури (замени если есть другая)
+    gif_url = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHJueXF6bmZ6bmZ6bmZ6bmZ6bmZ6bmZ6bmZ6bmZ6bmZ6bmZ6JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o7TKMGpxxcaOXYT60/giphy.gif"
+    
+    caption = f"<b>『 🌸 𝓦𝓪𝓰𝓾𝓻𝓲𝓴𝓸 』</b>\n\nПриветик! Я тут. Что будем делать сегодня?"
+    if uid == OWNER_ID:
+        caption = f"<b>『 🌸 𝓦𝓪𝓰𝓾𝓻𝓲𝓴𝓸 』</b>\n\nЗдравствуй, мой любимый Создатель! ❤️ Я готова к работе."
 
-@dp.callback_query(F.data == "admin_help")
-async def admin_help_call(call: CallbackQuery):
-    text = ("<b>🛡 Команды админа (реплаем):</b>\n"
-            "• <code>мут</code> / <code>размут</code>\n"
-            "• <code>варн</code> / <code>снять варн</code>\n"
-            "• <code>бан</code> / <code>разбан</code>\n"
-            "• <code>+админ</code>")
-    await call.message.edit_text(text, parse_mode="HTML", reply_markup=main_menu())
+    await m.answer_animation(gif_url, caption=caption, parse_mode="HTML", reply_markup=get_main_menu(uid))
 
-# --- РП ДАННЫЕ ---
-rp_actions = {
-    "обнять": "hug", "поцеловать": "kiss", "кусь": "bite", "вьебать": "slap",
-    "лик": "lick", "сон": "sleep", "танец": "dance", "ням": "nom",
-    "чмок": "smile", "игра": "poke", "секс": "spank", "щекотка": "tickle",
-    "массаж": "pat", "ванна": "cuddle", "подарок": "handhold",
-    "гладить": "pat", "злиться": "bully", "грустить": "sad", "радоваться": "happy",
-    "хвалить": "smile", "обидеться": "blush", "подмигнуть": "wink", "испугаться": "shrug"
-}
-
-# --- ОБРАБОТЧИК СООБЩЕНИЙ ---
-
-@dp.message(F.text.casefold().in_({"приветик вагури", "вагури меню", "каоруко меню", "меню", "вагури привет"}))
-async def cmd_open_menu(m: types.Message):
-    await m.answer("<b>『 🌸 𝓦𝓪𝓰𝓾𝓻𝓲𝓴𝓸 』</b>\n\nЯ тут! Чем могу помочь?", parse_mode="HTML", reply_markup=main_menu())
-
+# --- РП И АДМИНКА ---
 @dp.message()
-async def main_handler(m: types.Message):
+async def handler(m: types.Message):
     if not m.text: return
     txt = m.text.lower().strip()
     uid = m.from_user.id
     check_user(uid, m.from_user.first_name)
     is_adm = uid in admins or uid == OWNER_ID
 
-    # Админские команды
     if txt == "+админ" and uid == OWNER_ID and m.reply_to_message:
         tid = m.reply_to_message.from_user.id
-        check_user(tid, m.reply_to_message.from_user.first_name)
         if tid not in admins: admins.append(tid)
-        return await m.answer(f"🛡 {m.reply_to_message.from_user.first_name} теперь мой любимчик-помощник!")
+        return await m.answer(f"🛡 {m.reply_to_message.from_user.first_name} теперь в списке любимчиков!")
 
     if txt == "мут" and is_adm and m.reply_to_message:
         await m.chat.restrict(m.reply_to_message.from_user.id, permissions=ChatPermissions(can_send_messages=False), until_date=timedelta(minutes=10))
-        return await m.answer(f"🤫 {m.reply_to_message.from_user.first_name} отправлен в угол на 10 минут.")
+        return await m.answer("🤫 Тишина в библиотеке! Мут на 10 минут.")
 
-    if txt == "размут" and is_adm and m.reply_to_message:
-        await m.chat.restrict(m.reply_to_message.from_user.id, permissions=ChatPermissions(can_send_messages=True))
-        return await m.answer(f"✨ {m.reply_to_message.from_user.first_name} прощен!")
-
-    if txt == "варн" and is_adm and m.reply_to_message:
-        tid = m.reply_to_message.from_user.id
-        check_user(tid, m.reply_to_message.from_user.first_name)
-        user_data[tid]["warns"] += 1
-        if user_data[tid]["warns"] >= 3:
-            await m.chat.ban(tid)
-            return await m.answer("🚫 3 варна! Прощай навсегда.")
-        return await m.answer(f"⚠️ Предупреждение для {m.reply_to_message.from_user.first_name} ({user_data[tid]['warns']}/3)")
-
-    if txt == "снять варн" and is_adm and m.reply_to_message:
-        tid = m.reply_to_message.from_user.id
-        check_user(tid, m.reply_to_message.from_user.first_name)
-        if user_data[tid]["warns"] > 0: user_data[tid]["warns"] -= 1
-        return await m.answer(f"😇 С {m.reply_to_message.from_user.first_name} снят варн!")
-
-    # РП команды
-    if txt in rp_actions and m.reply_to_message:
-        target = m.reply_to_message.from_user.mention_html()
-        async with aiohttp.ClientSession() as s:
-            async with s.get(f"https://api.waifu.pics/sfw/{rp_actions[txt]}") as r:
-                url = (await r.json())["url"] if r.status == 200 else None
-                msg = f"『 🌸 』 {m.from_user.mention_html()} выполняет <b>{txt}</b> для {target}!"
-                if url: await m.answer_animation(url, caption=msg, parse_mode="HTML")
-                else: await m.answer(msg, parse_mode="HTML")
-        user_data[uid]["exp"] += 2
+    # (Тут можно добавить остальные РП команды по аналогии)
 
 async def main():
     keep_alive()
