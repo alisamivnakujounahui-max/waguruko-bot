@@ -3,14 +3,29 @@ import random
 import aiohttp
 import time
 import os
+from threading import Thread
+from flask import Flask
 from aiogram import Bot, Dispatcher, types
 
-TOKEN = os.getenv("TOKEN")
+# --- МИНИ-СЕРВЕР ДЛЯ RENDER ---
+app = Flask('')
 
+@app.route('/')
+def home():
+    return "I'm alive"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+# ------------------------------
+
+TOKEN = os.getenv("TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Кулдауны (сбросятся при перезагрузке сервера)
 user_cooldowns = {}
 
 rp_actions = {
@@ -18,7 +33,7 @@ rp_actions = {
     "поцеловать": {"texts": ["поцеловал(а) {target} 💋"], "gif": "kiss"},
     "ударить": {"texts": ["ударил(а) {target} 💥"], "gif": "slap"},
     "погладить": {"texts": ["погладил(а) {target} 🥺"], "gif": "pat"},
-    "кусь": {"texts": ["кусьнул(а) {target} 🦷"], "gif": "bite"},
+    "кусь": {"texts": ["кусьнул(а) {target} за бочок 🦷"], "gif": "bite"},
     "вьебать": {"texts": ["со всей дури вьебал(а) {target} по лицу 👊"], "gif": "slap"}
 }
 
@@ -98,4 +113,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    keep_alive() # ЗАПУСК ФЛАСКА
     asyncio.run(main())
