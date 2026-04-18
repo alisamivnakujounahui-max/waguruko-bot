@@ -14,7 +14,7 @@ def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run).start()
 
 TOKEN = os.getenv("TOKEN")
-OWNER_ID = 123456789 # !!! ЗАМЕНИ НА СВОЙ ID (узнай его через бот @userinfobot) !!!
+OWNER_ID = 7799004635 # !!! ЗАМЕНИ НА СВОЙ ID (узнай его через бот @userinfobot) !!!
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
