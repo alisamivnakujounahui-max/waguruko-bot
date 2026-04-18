@@ -4,10 +4,10 @@ from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 
-# --- ЗАГЛУШКА ДЛЯ RENDER ---
+# --- НЕВИДИМЫЙ ЩИТ ДЛЯ RENDER ---
 app = Flask('')
 @app.route('/')
-def home(): return "Бот запущен!"
+def home(): return "Бот Каоруко активен!"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run).start()
 
@@ -16,10 +16,9 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 user_data = {} 
-# Кулдаун для теста — 10 секунд, потом поменяешь на 3600 (час) или больше
-CARD_COOLDOWN = 10 
+COOLDOWN_TIME = 60 # 1 минута кулдауна
 
-# РП команды теперь работают и текстом (обнять), и через слэш (/hug)
+# РП действия
 rp_actions = {
     "обнять": {"text": "обнял(а) {target} 🤗", "gif": "hug"},
     "поцеловать": {"text": "поцеловал(а) {target} 💋", "gif": "kiss"},
@@ -31,22 +30,23 @@ rp_actions = {
     "трахнуть": {"text": "жестко отодрал(а) {target} 🔞", "gif": "spank"}
 }
 
-# Ссылки заменены на более стабильные
+# База персонажей (новые ссылки)
 characters = {
     "legendary": [
         {"name": "Вагури Каоруко", "rarity": "👑 ЛЕГЕНДАРКА (5%)", 
-         "links": ["https://i.ibb.co/v4m0fXG/kaoruko.jpg"]}
+         "links": ["https://img2.joyreactor.cc/pics/post/full/Kaoruko-Waguri-The-Fragrant-Flower-Blooms-With-Dignity-Anime-7566162.jpeg"]}
     ],
     "common": [
-        {"name": "Ринтаро Цумуги", "rarity": "⭐ Эпик", "links": ["https://i.ibb.co/fNfXWjK/rintaro.jpg"]},
-        {"name": "Субару Хосина", "rarity": "💎 Редкое", "links": ["https://i.ibb.co/brq4h8m/subaru.jpg"]}
+        {"name": "Ринтаро Цумуги", "rarity": "⭐ Эпик", "links": ["https://pic.rutubelist.ru/user/3b/03/3b03882772671239c89423b497042898.jpg"]},
+        {"name": "Субару Хосина", "rarity": "💎 Редкое", "links": ["https://i.pinimg.com/originals/44/2c/8d/442c8d50b7305904f65306637494f653.jpg"]},
+        {"name": "Саку Сакума", "rarity": "💎 Редкое", "links": ["https://i.pinimg.com/originals/91/92/72/91927233633215569424321234567890.jpg"]}
     ]
 }
 
 async def get_waifu_gif(action):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://api.waifu.pics/sfw/{action}") as r:
+            async with session.get(f"https://api.waifu.pics/sfw/{action}", timeout=5) as r:
                 if r.status == 200:
                     data = await r.json()
                     return data["url"]
@@ -55,18 +55,19 @@ async def get_waifu_gif(action):
 def check_user(uid):
     if uid not in user_data: user_data[uid] = {"exp": 0, "last_card": 0}
 
+# --- ОБРАБОТЧИКИ ---
+
 @dp.message(Command("start"))
 async def cmd_start(m: types.Message):
-    await m.answer("🌸 Бот Waguruko готов к работе!\nНапиши /help, чтобы вспомнить всё.")
+    await m.answer(f"🌸 Привет, {m.from_user.first_name}!\nЯ бот Каоруко. Напиши /help чтобы увидеть что я могу.")
 
 @dp.message(Command("help"))
 async def cmd_help(m: types.Message):
     text = (
-        "<b>📂 Список команд:</b>\n\n"
-        "🃏 <code>карточка</code> — выбить персонажа\n"
-        "👤 /profile — твой опыт и ранг\n"
-        "👋 /start — перезапуск\n\n"
-        "<b>🎭 РП команды (в ответ на сообщение):</b>\n"
+        "<b>🎮 Основное:</b>\n"
+        "• <code>карточка</code> — выбить персонажа (КД 1 мин)\n"
+        "• /profile — твой опыт\n\n"
+        "<b>🎭 РП команды (ответом на сообщение):</b>\n"
         "<i>обнять, поцеловать, кусь, ударить, вьебать, смутиться, трахнуть</i>"
     )
     await m.answer(text, parse_mode="HTML")
@@ -75,7 +76,7 @@ async def cmd_help(m: types.Message):
 async def cmd_profile(m: types.Message):
     check_user(m.from_user.id)
     u = user_data[m.from_user.id]
-    await m.answer(f"👤 <b>Профиль:</b> {m.from_user.first_name}\n💠 <b>Опыт:</b> {u['exp']}\n🏆 <b>Ранг:</b> Новичок", parse_mode="HTML")
+    await m.answer(f"👤 <b>Профиль:</b> {m.from_user.first_name}\n💠 <b>Опыт:</b> {u['exp']}", parse_mode="HTML")
 
 @dp.message(F.text.casefold() == "карточка")
 async def get_card(m: types.Message):
@@ -83,20 +84,18 @@ async def get_card(m: types.Message):
     check_user(uid)
     now = time.time()
     
-    if now - user_data[uid]["last_card"] < CARD_COOLDOWN:
-        rem = int(CARD_COOLDOWN - (now - user_data[uid]["last_card"]))
+    if now - user_data[uid]["last_card"] < COOLDOWN_TIME:
+        rem = int(COOLDOWN_TIME - (now - user_data[uid]["last_card"]))
         return await m.reply(f"⏳ КД! Жди {rem} сек.")
 
-    # Гача-логика
     pool = "legendary" if random.randint(1, 100) <= 5 else "common"
     char = random.choice(characters[pool])
+    photo = random.choice(char["links"])
     
     try:
-        await m.answer_photo(random.choice(char["links"]), 
-                           caption=f"🎁 <b>{char['name']}</b>\n✨ {char['rarity']}", 
-                           parse_mode="HTML")
+        await m.answer_photo(photo, caption=f"🎁 <b>{char['name']}</b>\n✨ {char['rarity']}", parse_mode="HTML")
     except:
-        await m.answer(f"✅ Выпал(а): {char['name']} ({char['rarity']})\n(Ошибка фото, но карта засчитана!)")
+        await m.answer(f"✅ Выпал(а): <b>{char['name']}</b> ({char['rarity']})\n(Ошибка фото, но карта засчитана!)", parse_mode="HTML")
     
     user_data[uid]["last_card"] = now
     user_data[uid]["exp"] += 10
@@ -107,7 +106,8 @@ async def rp_handler(m: types.Message):
     act = m.text.lower().strip()
     if act in rp_actions:
         gif = await get_waifu_gif(rp_actions[act]["gif"])
-        txt = f"{m.from_user.mention_html()} {rp_actions[act]['text'].format(target=m.reply_to_message.from_user.mention_html())}"
+        target = m.reply_to_message.from_user.mention_html()
+        txt = f"{m.from_user.mention_html()} {rp_actions[act]['text'].format(target=target)}"
         check_user(m.from_user.id)
         user_data[m.from_user.id]["exp"] += 1
         if gif: await m.answer_animation(gif, caption=txt, parse_mode="HTML")
