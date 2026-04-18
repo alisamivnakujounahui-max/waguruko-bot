@@ -74,7 +74,7 @@ async def get_gif(action):
 async def get_card(message: types.Message):
     user_id = message.from_user.id
     current_time = time.time()
-    COOLDOWN = 10800 # 3 часа
+    COOLDOWN = 60 # 3 часа
 
     if user_id in user_cooldowns and (current_time - user_cooldowns[user_id] < COOLDOWN):
         rem = int((COOLDOWN - (current_time - user_cooldowns[user_id])) / 60)
