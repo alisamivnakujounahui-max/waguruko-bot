@@ -3,23 +3,23 @@ from threading import Thread
 from datetime import timedelta
 from flask import Flask
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, CommandObject
-from aiogram.types import BotCommand, ChatPermissions, ReplyParameters, ErrorEvent
+from aiogram.filters import Command
+from aiogram.types import BotCommand, ChatPermissions, ReplyParameters
 
 # --- КОНФИГУРАЦИЯ ---
 TOKEN = os.getenv("TOKEN")
 OWNER_ID = 7799004635 
-DB_FILE = "waguruko_god_db.json"
+DB_FILE = "waguruko_ultimate_db.json"
 
 logging.basicConfig(level=logging.INFO)
 
 app = Flask('')
 @app.route('/')
-def home(): return "Waguruko God Engine: Online"
+def home(): return "Waguruko God-Mode: Online"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run).start()
 
-# --- МАССИВНАЯ СИСТЕМА ДАННЫХ ---
+# --- СИСТЕМА БАЗЫ ДАННЫХ ---
 class Database:
     def __init__(self, path):
         self.path = path
@@ -57,7 +57,7 @@ RP_MAP = {
     "ударить": "punch", "похвалить": "highfive", "танцевать": "dance"
 }
 
-# --- БЛОК 1: ОБРАБОТЧИК КОМАНД (ЧЕРЕЗ СЛЕШ /) ---
+# --- СЕКЦИЯ 1: КОМАНДЫ (ЧЕРЕЗ СЛЕШ /) ---
 
 @dp.message(Command("cake"))
 async def cmd_cake(m: types.Message):
@@ -65,81 +65,68 @@ async def cmd_cake(m: types.Message):
     now = time.time()
     if now - u["last_cake"] < 3600:
         rem = int((3600 - (now - u["last_cake"])) / 60)
-        return await m.reply(f"⏳ Твои щечки еще не готовы к новому тортику! Приходи через {rem} мин.")
-    
+        return await m.reply(f"⏳ Твои щечки еще не готовы! Жди {rem} мин.")
     growth = random.randint(5, 25)
     u["softness"] += growth
     u["last_cake"] = now
     db.save()
-    await m.reply(f"🍰 <b>Ням-ням!</b>\nЧерез команду ты скушал элитный торт.\nМягкость: <b>+{growth} ед.</b> (Итого: {u['softness']})", parse_mode="HTML")
+    await m.reply(f"🍰 <b>Мягкость щечек выросла!</b>\nРезультат: <b>+{growth} ед.</b> (Всего: {u['softness']})", parse_mode="HTML")
 
 @dp.message(Command("profile"))
 async def cmd_profile(m: types.Message):
     uid = m.from_user.id
     u = db.get_u(uid, m.from_user.full_name)
     role = "👑 Создатель" if uid == OWNER_ID else ("🛡 Админ" if uid in db.data["admins"] else "👤 Участник")
-    res = (f"<b>『 🌸 Профиль Вагури 』</b>\n\n"
-           f"👤 <b>Имя:</b> {u['name']}\n"
-           f"🎖 <b>Статус:</b> {role}\n"
-           f"☁️ <b>Мягкость щек:</b> {u['softness']} ед.\n"
-           f"⚠️ <b>Варны:</b> {u['warns']}/3")
+    res = (f"<b>『 🌸 Профиль 』</b>\n\n👤 <b>Имя:</b> {u['name']}\n🎖 <b>Статус:</b> {role}\n☁️ <b>Мягкость:</b> {u['softness']} ед.\n⚠️ <b>Варны:</b> {u['warns']}/3")
     await m.reply(res, parse_mode="HTML")
 
 @dp.message(Command("top"))
 async def cmd_top(m: types.Message):
     top = sorted(db.data["users"].items(), key=lambda x: x[1]['softness'], reverse=True)[:10]
-    res = "<b>☁️ Топ Самых Мягких Щечек чата:</b>\n\n"
+    res = "<b>☁️ Топ Самых Мягких Щечек:</b>\n\n"
     for i, (uid_s, d) in enumerate(top, 1):
         res += f"{i}. <a href='tg://user?id={uid_s}'>{d['name']}</a> — <b>{d['softness']}</b>\n"
     await m.answer(res, parse_mode="HTML")
 
-@dp.message(Command("admins"))
-async def cmd_admins(m: types.Message):
-    res = "<b>👑 Любимчики Вагури (Админы):</b>\n\n"
-    for i, adm_id in enumerate(db.data["admins"], 1):
-        u_info = db.data["users"].get(str(adm_id))
-        name = u_info["name"] if u_info else f"Друг ({adm_id})"
-        res += f"{i}. <a href='tg://user?id={adm_id}'>{name}</a>\n"
-    await m.answer(res, parse_mode="HTML")
-
-# --- БЛОК 2: ТЕКСТОВЫЕ ТРИГГЕРЫ (БЕЗ СЛЕША) ---
+# --- СЕКЦИЯ 2: ОБРАБОТЧИК ТЕКСТА (МОДЕРКА + РП) ---
 
 @dp.message(F.text)
-async def text_handler(m: types.Message):
+async def text_logic(m: types.Message):
     uid = m.from_user.id
     txt = m.text.lower().strip()
     u = db.get_u(uid, m.from_user.full_name)
 
-    # Триггер на тортик словом
+    # Триггер на тортик без слеша
     if txt == "тортик":
-        now = time.time()
-        if now - u["last_cake"] < 3600:
-            return await m.reply("⏳ Щечки еще сытые!")
-        growth = random.randint(1, 20)
-        u["softness"] += growth
-        u["last_cake"] = now
-        db.save()
-        return await m.reply(f"🍰 Ты скушал тортик! Мягкость +{growth} ед.")
+        return await cmd_cake(m)
 
-    # Модерация и РП (только если есть реплей)
+    # Разбан по ID (не реплей)
+    if txt.startswith("разбан ") and (uid in db.data["admins"] or uid == OWNER_ID):
+        try:
+            t_id = int(txt.split()[1])
+            await bot.unban_chat_member(m.chat.id, t_id, only_if_banned=True)
+            return await m.answer(f"🔓 Пользователь {t_id} разбанен!")
+        except: return await m.answer("❌ Формат: разбан [ID]")
+
+    # Блок реплаев
     if m.reply_to_message:
         target = m.reply_to_message.from_user
         t_u = db.get_u(target.id, target.full_name)
 
-        # Модерка
+        # МОДЕРАЦИЯ
         if uid in db.data["admins"] or uid == OWNER_ID:
             try:
-                if txt == "+админ" and uid == OWNER_ID:
-                    if target.id not in db.data["admins"]: db.data["admins"].append(target.id); db.save()
-                    return await m.answer(f"💎 {target.first_name} теперь Админ!")
-                
-                if txt == "-админ" and uid == OWNER_ID:
-                    if target.id in db.data["admins"]: db.data["admins"].remove(target.id); db.save()
-                    return await m.answer(f"❌ {target.first_name} удален из админов.")
+                if txt == "размут":
+                    await bot.restrict_chat_member(m.chat.id, target.id, ChatPermissions(can_send_messages=True, can_send_other_messages=True, can_add_web_page_previews=True))
+                    return await m.answer(f"🔊 {target.first_name} размучен!")
+
+                if txt == "разбан":
+                    await bot.unban_chat_member(m.chat.id, target.id, only_if_banned=True)
+                    return await m.answer(f"🔓 {target.first_name} разбанен!")
 
                 if txt == "мут":
                     await bot.restrict_chat_member(m.chat.id, target.id, ChatPermissions(can_send_messages=False), until_date=timedelta(minutes=15))
-                    return await m.answer(f"🔇 {target.first_name} в муте на 15 мин.")
+                    return await m.answer(f"🔇 {target.first_name} замолчал на 15 мин.")
 
                 if txt == "варн":
                     t_u["warns"] += 1
@@ -158,49 +145,51 @@ async def text_handler(m: types.Message):
                     await bot.ban_chat_member(m.chat.id, target.id)
                     await bot.unban_chat_member(m.chat.id, target.id)
                     return await m.answer(f"👞 {target.first_name} кикнут!")
-            except:
-                return await m.reply("❌ Недостаточно прав!")
 
-        # РП действия
+                if txt == "+админ" and uid == OWNER_ID:
+                    if target.id not in db.data["admins"]: db.data["admins"].append(target.id); db.save()
+                    return await m.answer(f"💎 {target.first_name} теперь Админ!")
+
+            except Exception as e:
+                return await m.reply(f"❌ Ошибка прав: {e}")
+
+        # РП ДЕЙСТВИЯ
         if txt in RP_MAP:
             async with aiohttp.ClientSession() as sess:
                 try:
                     async with sess.get(f"https://api.waifu.pics/sfw/{RP_MAP[txt]}") as r:
                         data = await r.json()
                         await m.answer_animation(data["url"], caption=f"🌸 {m.from_user.mention_html()} {txt} {target.mention_html()}!", parse_mode="HTML")
-                except:
-                    await m.answer(f"🌸 {m.from_user.first_name} {txt} {target.first_name}!")
+                except: await m.answer(f"🌸 {m.from_user.first_name} {txt} {target.first_name}!")
 
     # Очистка чата
-    if txt.startswith("очистить") and (uid in db.data["admins"] or uid == OWNER_ID):
+    if txt.startswith("очистить ") and (uid in db.data["admins"] or uid == OWNER_ID):
         try:
-            num = int(txt.split()[1])
-            num = min(num, 100)
+            num = min(int(txt.split()[1]), 100)
             await m.delete()
-            async for message in bot.get_chat_history(m.chat.id, limit=num):
-                try: await message.delete()
+            async for msg in bot.get_chat_history(m.chat.id, limit=num):
+                try: await msg.delete()
                 except: continue
         except: pass
 
-# --- БЛОК 3: СИСТЕМНЫЕ ФУНКЦИИ ---
+# --- СЕКЦИЯ 3: СИСТЕМНЫЙ ЗАПУСК ---
 
 async def set_commands(bot: Bot):
-    commands = [
-        BotCommand(command="cake", description="Скушать тортик"),
-        BotCommand(command="profile", description="Твой профиль"),
+    await bot.set_my_commands([
+        BotCommand(command="cake", description="Тортик"),
+        BotCommand(command="profile", description="Профиль"),
         BotCommand(command="top", description="Топ мягкости"),
-        BotCommand(command="admins", description="Любимчики"),
-    ]
-    await bot.set_my_commands(commands)
+    ])
 
 @dp.message(F.new_chat_members)
-async def welcome(m: types.Message):
+async def welcome_bot(m: types.Message):
     for mem in m.new_chat_members:
         if mem.is_bot: continue
-        await m.answer(f"🌸 Добро пожаловать, {mem.mention_html()}! Я Вагури Каоруко. Напиши /cake чтобы начать расти!", parse_mode="HTML")
+        await m.answer(f"🌸 Привет, {mem.mention_html()}! Я Вагури. Попробуй /cake!", parse_mode="HTML")
 
 async def main():
     keep_alive()
+    # УБИВАЕМ КОНФЛИКТЫ: удаляем старые вебхуки и зависшие сообщения
     await bot.delete_webhook(drop_pending_updates=True)
     await set_commands(bot)
     await dp.start_polling(bot, skip_updates=True)
@@ -209,4 +198,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
-        logging.error(f"Глобальная ошибка: {e}")
+        print(f"CRITICAL ERROR: {e}")
