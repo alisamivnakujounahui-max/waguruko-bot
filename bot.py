@@ -85,7 +85,16 @@ async def cmd_top(m: types.Message):
     top = sorted(db.data["users"].items(), key=lambda x: x[1]['softness'], reverse=True)[:10]
     res = "<b>☁️ Топ Самых Мягких Щечек:</b>\n\n"
     for i, (uid_s, d) in enumerate(top, 1):
-        res += f"{i}. <a href='tg://user?id={uid_s}'>{d['name']}</a> — <b>{d['softness']}</b>\n"
+        res += f"{i}. {d['name']} — <b>{d['softness']}</b>\n"
+    await m.answer(res, parse_mode="HTML")
+
+# --- НОВАЯ КОМАНДА RP ---
+@dp.message(Command("rp"))
+async def cmd_rp(m: types.Message):
+    res = "<b>🌸 RP команды:</b>\n\n"
+    for k in RP_MAP.keys():
+        res += f"• {k}\n"
+    res += "\nОтветь на сообщение и напиши действие 💬"
     await m.answer(res, parse_mode="HTML")
 
 # --- СЕКЦИЯ 2: ОБРАБОТЧИК ТЕКСТА (МОДЕРКА + РП) ---
@@ -96,11 +105,9 @@ async def text_logic(m: types.Message):
     txt = m.text.lower().strip()
     u = db.get_u(uid, m.from_user.full_name)
 
-    # Триггер на тортик без слеша
     if txt == "тортик":
         return await cmd_cake(m)
 
-    # Разбан по ID (не реплей)
     if txt.startswith("разбан ") and (uid in db.data["admins"] or uid == OWNER_ID):
         try:
             t_id = int(txt.split()[1])
@@ -108,12 +115,10 @@ async def text_logic(m: types.Message):
             return await m.answer(f"🔓 Пользователь {t_id} разбанен!")
         except: return await m.answer("❌ Формат: разбан [ID]")
 
-    # Блок реплаев
     if m.reply_to_message:
         target = m.reply_to_message.from_user
         t_u = db.get_u(target.id, target.full_name)
 
-        # МОДЕРАЦИЯ
         if uid in db.data["admins"] or uid == OWNER_ID:
             try:
                 if txt == "размут":
@@ -147,30 +152,34 @@ async def text_logic(m: types.Message):
                     return await m.answer(f"👞 {target.first_name} кикнут!")
 
                 if txt == "+админ" and uid == OWNER_ID:
-                    if target.id not in db.data["admins"]: db.data["admins"].append(target.id); db.save()
+                    if target.id not in db.data["admins"]:
+                        db.data["admins"].append(target.id)
+                        db.save()
                     return await m.answer(f"💎 {target.first_name} теперь Админ!")
 
             except Exception as e:
                 return await m.reply(f"❌ Ошибка прав: {e}")
 
-        # РП ДЕЙСТВИЯ
         if txt in RP_MAP:
             async with aiohttp.ClientSession() as sess:
                 try:
                     async with sess.get(f"https://api.waifu.pics/sfw/{RP_MAP[txt]}") as r:
                         data = await r.json()
                         await m.answer_animation(data["url"], caption=f"🌸 {m.from_user.mention_html()} {txt} {target.mention_html()}!", parse_mode="HTML")
-                except: await m.answer(f"🌸 {m.from_user.first_name} {txt} {target.first_name}!")
+                except:
+                    await m.answer(f"🌸 {m.from_user.first_name} {txt} {target.first_name}!")
 
-    # Очистка чата
     if txt.startswith("очистить ") and (uid in db.data["admins"] or uid == OWNER_ID):
         try:
             num = min(int(txt.split()[1]), 100)
             await m.delete()
             async for msg in bot.get_chat_history(m.chat.id, limit=num):
-                try: await msg.delete()
-                except: continue
-        except: pass
+                try:
+                    await msg.delete()
+                except:
+                    continue
+        except:
+            pass
 
 # --- СЕКЦИЯ 3: СИСТЕМНЫЙ ЗАПУСК ---
 
@@ -179,6 +188,7 @@ async def set_commands(bot: Bot):
         BotCommand(command="cake", description="Тортик"),
         BotCommand(command="profile", description="Профиль"),
         BotCommand(command="top", description="Топ мягкости"),
+        BotCommand(command="rp", description="Список RP команд"),
     ])
 
 @dp.message(F.new_chat_members)
@@ -189,7 +199,6 @@ async def welcome_bot(m: types.Message):
 
 async def main():
     keep_alive()
-    # УБИВАЕМ КОНФЛИКТЫ: удаляем старые вебхуки и зависшие сообщения
     await bot.delete_webhook(drop_pending_updates=True)
     await set_commands(bot)
     await dp.start_polling(bot, skip_updates=True)
