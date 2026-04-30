@@ -151,11 +151,7 @@ RP_MAP = {
     "тык": "poke",
     "лизнуть": "lick",
     "прижаться": "cuddle",
-    "потискать": "handhold",
-    "смутиться": "blush",
-    "обидеться": "cry",
-    "ударить": "punch",
-    "похвалить": "highfive",
+    "потискать": "cuddle",
     "танцевать": "dance"
 }
 
@@ -473,60 +469,51 @@ async def text_logic(m: types.Message):
 
         if txt in RP_MAP:
 
-            async with aiohttp.ClientSession() as sess:
+    try:
 
-                try:
+        async with aiohttp.ClientSession() as sess:
 
-                    async with sess.get(
-                        f"https://api.waifu.pics/sfw/{RP_MAP[txt]}"
-                    ) as r:
+            async with sess.get(
+                f"https://nekos.best/api/v2/{RP_MAP[txt]}"
+            ) as r:
 
-                        data = await r.json()
+                data = await r.json()
 
-                        await m.answer_animation(
-                            data["url"],
-                            caption=(
-                                f"🌸 "
-                                f"{m.from_user.mention_html()} "
-                                f"{txt} "
-                                f"{target.mention_html()}!"
-                            ),
-                            parse_mode="HTML"
-                        )
+                url = data["results"][0]["url"]
 
-                except:
-
-                    await m.answer(
-                        f"🌸 {m.from_user.first_name} "
+                await m.answer_animation(
+                    url,
+                    caption=(
+                        f"🌸 "
+                        f"{m.from_user.mention_html()} "
                         f"{txt} "
-                        f"{target.first_name}!"
-                    )
+                        f"{target.mention_html()}!"
+                    ),
+                    parse_mode="HTML"
+                )
 
-    if txt.startswith("очистить ") and (
-        uid in db.data["admins"]
-        or uid == OWNER_ID
-    ):
+    except Exception as e:
 
+        # 🔥 запасной вариант если API упал
         try:
 
-            num = min(int(txt.split()[1]), 100)
-
-            await m.delete()
-
-            async for msg in bot.get_chat_history(
-                m.chat.id,
-                limit=num
-            ):
-
-                try:
-
-                    await msg.delete()
-
-                except:
-                    continue
+            await m.answer_photo(
+                "https://i.imgur.com/8Km9tLL.jpg",
+                caption=(
+                    f"🌸 "
+                    f"{m.from_user.first_name} "
+                    f"{txt} "
+                    f"{target.first_name}!"
+                )
+            )
 
         except:
-            pass
+
+            await m.answer(
+                f"🌸 {m.from_user.first_name} "
+                f"{txt} "
+                f"{target.first_name}!"
+            )
 
 # --- КОМАНДЫ БОТА ---
 
