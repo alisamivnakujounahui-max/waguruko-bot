@@ -467,13 +467,15 @@ async def text_logic(m: types.Message):
                     f"❌ Ошибка прав: {e}"
                 )
 
-                if txt in RP_MAP:
-    try:  # Теперь try внутри if (есть отступ)
+if txt in RP_MAP:
+    try:
         async with aiohttp.ClientSession() as sess:
-            async with sess.get(f"https://nekos.best/api/v2/{RP_MAP[txt]}") as r:
+            async with sess.get(f"https://nekos.best{RP_MAP[txt]}") as r:
                 data = await r.json()
                 url = data["results"][0]["url"]
-
+                
+                # Отправка сообщения должна быть ВНУТРИ try, 
+                # чтобы использовать полученный url
                 await m.answer_animation(
                     url,
                     caption=(
@@ -484,8 +486,9 @@ async def text_logic(m: types.Message):
                     ),
                     parse_mode="HTML"
                 )
-
     except Exception as e:
+        print(f"Ошибка при запросе к API или отправке: {e}")
+
 
         # 🔥 запасной вариант если API упал
         try:
