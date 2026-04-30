@@ -206,41 +206,30 @@ async def cmd_cake(m: types.Message):
 @dp.message(Command("give"))
 async def cmd_give(m: types.Message):
 
+    # 🔒 ТОЛЬКО ВЛАДЕЛЕЦ
     if m.from_user.id != OWNER_ID:
-        return
+        return  # молча игнор
 
     if not m.reply_to_message:
-
-        return await m.reply(
-            "❌ Ответь на сообщение пользователя"
-        )
+        return await m.reply("❌ Ответь на сообщение пользователя")
 
     try:
-
         amount = int(m.text.split()[1])
-
     except:
-
-        return await m.reply(
-            "❌ Формат: /give 100"
-        )
+        return await m.reply("❌ Формат: /give 100")
 
     target = m.reply_to_message.from_user
-
     u = db.get_u(target.id, target.full_name)
 
     u["softness"] += amount
 
     db.save_local()
-
     await db.backup(bot)
 
     await m.reply(
-        f"🌸 Вагурочка подарила "
-        f"{target.mention_html()} "
+        f"🌸 Вагурочка подарила {target.mention_html()} "
         f"<b>+{amount}</b> мягкости!\n"
-        f"☁️ Теперь у него: "
-        f"<b>{u['softness']}</b>",
+        f"☁️ Теперь у него: <b>{u['softness']}</b>",
         parse_mode="HTML"
     )
 
@@ -541,36 +530,12 @@ async def text_logic(m: types.Message):
 
 # --- КОМАНДЫ БОТА ---
 
-async def set_commands(bot: Bot):
-
-    await bot.set_my_commands([
-
-        BotCommand(
-            command="cake",
-            description="Тортик"
-        ),
-
-        BotCommand(
-            command="give",
-            description="Выдать мягкость"
-        ),
-
-        BotCommand(
-            command="profile",
-            description="Профиль"
-        ),
-
-        BotCommand(
-            command="top",
-            description="Топ мягкости"
-        ),
-
-        BotCommand(
-            command="rp",
-            description="Список RP команд"
-        ),
-
-    ])
+await bot.set_my_commands([
+    BotCommand(command="cake", description="Тортик"),
+    BotCommand(command="profile", description="Профиль"),
+    BotCommand(command="top", description="Топ мягкости"),
+    BotCommand(command="rp", description="Список RP команд"),
+])
 
 # --- ПРИВЕТСТВИЕ ---
 
