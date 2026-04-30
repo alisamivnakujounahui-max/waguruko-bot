@@ -467,17 +467,11 @@ async def text_logic(m: types.Message):
                     f"❌ Ошибка прав: {e}"
                 )
 
-        if txt in RP_MAP:
-
-    try:
-
-        async with aiohttp.ClientSession() as sess:
-
-            async with sess.get(
-                f"https://nekos.best/api/v2/{RP_MAP[txt]}"
-            ) as r:
-
-                data = await r.json()
+                if txt in RP_MAP:
+                    try:  # Теперь try внутри if (есть отступ)
+                        async with aiohttp.ClientSession() as sess:
+                            async with sess.get(f"https://nekos.best/api/v2/{RP_MAP[txt]}") as r:
+                                data = await r.json()
 
                 url = data["results"][0]["url"]
 
