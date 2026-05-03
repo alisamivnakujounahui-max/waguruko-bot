@@ -1,12 +1,27 @@
-import asyncio, random, aiohttp, time, os, json, logging
+import asyncio
+import random
+import aiohttp
+import time
+import os
+import json
+import logging
+
 from threading import Thread
 from datetime import timedelta
+
 from flask import Flask
+
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import BotCommand, ChatPermissions, ReplyParameters
+from aiogram.types import (
+    BotCommand,
+    ChatPermissions,
+    FSInputFile
+)
 
-# --- КОНФИГУРАЦИЯ ---
+# =========================================================
+# CONFIG
+# =========================================================
 
 TOKEN = os.getenv("TOKEN")
 
@@ -18,21 +33,29 @@ DB_FILE = "waguruko_ultimate_db.json"
 
 logging.basicConfig(level=logging.INFO)
 
-# --- FLASK KEEP ALIVE ---
+# =========================================================
+# FLASK KEEP ALIVE
+# =========================================================
 
-app = Flask('')
+app = Flask("")
 
-@app.route('/')
+
+@app.route("/")
 def home():
     return "Waguruko God-Mode: Online"
 
+
 def run():
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host="0.0.0.0", port=8080)
+
 
 def keep_alive():
     Thread(target=run).start()
 
-# --- БАЗА ДАННЫХ ---
+# =========================================================
+# DATABASE
+# =========================================================
+
 
 class Database:
 
@@ -46,11 +69,12 @@ class Database:
 
             try:
 
-                with open(self.path, 'r', encoding='utf-8') as f:
+                with open(self.path, "r", encoding="utf-8") as f:
                     return json.load(f)
 
-            except:
-                pass
+            except Exception as e:
+
+                print(f"LOAD LOCAL ERROR: {e}")
 
         return {
             "users": {},
@@ -63,7 +87,10 @@ class Database:
 
             msgs = []
 
-            async for msg in bot.get_chat_history(BACKUP_CHANNEL, limit=20):
+            async for msg in bot.get_chat_history(
+                BACKUP_CHANNEL,
+                limit=20
+            ):
 
                 if msg.document:
 
@@ -71,16 +98,23 @@ class Database:
                         msgs.append(msg)
 
             if not msgs:
+
                 print("BACKUP NOT FOUND")
                 return
 
             latest = msgs[0]
 
-            file = await bot.get_file(latest.document.file_id)
+            file = await bot.get_file(
+                latest.document.file_id
+            )
 
-            await bot.download_file(file.file_path, self.path)
+            await bot.download_file(
+                file.file_path,
+                self.path
+            )
 
-            with open(self.path, 'r', encoding='utf-8') as f:
+            with open(self.path, "r", encoding="utf-8") as f:
+
                 self.data = json.load(f)
 
             print("DATABASE RESTORED FROM TELEGRAM")
@@ -93,12 +127,18 @@ class Database:
 
         try:
 
-            with open(self.path, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=4)
+            with open(self.path, "w", encoding="utf-8") as f:
+
+                json.dump(
+                    self.data,
+                    f,
+                    ensure_ascii=False,
+                    indent=4
+                )
 
             await bot.send_document(
                 BACKUP_CHANNEL,
-                types.FSInputFile(self.path),
+                FSInputFile(self.path),
                 caption="waguruko backup"
             )
 
@@ -110,8 +150,14 @@ class Database:
 
     def save_local(self):
 
-        with open(self.path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=4)
+        with open(self.path, "w", encoding="utf-8") as f:
+
+            json.dump(
+                self.data,
+                f,
+                ensure_ascii=False,
+                indent=4
+            )
 
     def get_u(self, uid, name=None):
 
@@ -132,7 +178,9 @@ class Database:
 
         return self.data["users"][uid]
 
-# --- ИНИЦИАЛИЗАЦИЯ ---
+# =========================================================
+# INIT
+# =========================================================
 
 db = Database(DB_FILE)
 
@@ -140,7 +188,9 @@ bot = Bot(token=TOKEN)
 
 dp = Dispatcher()
 
-# --- RP ДЕЙСТВИЯ ---
+# =========================================================
+# RP ACTIONS
+# =========================================================
 
 RP_MAP = {
     "обнять": "hug",
@@ -155,23 +205,58 @@ RP_MAP = {
     "танцевать": "dance"
 }
 
-# --- /cake ---
+# =========================================================
+# BOT COMMANDS
+# =========================================================
+
+
+async def set_commands(bot_instance):
+
+    await bot_instance.set_my_commands([
+        BotCommand(
+            command="cake",
+            description="Тортик"
+        ),
+        BotCommand(
+            command="profile",
+            description="Профиль"
+        ),
+        BotCommand(
+            command="top",
+            description="Топ мягкости"
+        ),
+        BotCommand(
+            command="rp",
+            description="Список RP команд"
+        ),
+    ])
+
+# =========================================================
+# /cake
+# =========================================================
+
 
 @dp.message(Command("cake"))
 async def cmd_cake(m: types.Message):
 
     uid = m.from_user.id
 
-    u = db.get_u(uid, m.from_user.full_name)
+    u = db.get_u(
+        uid,
+        m.from_user.full_name
+    )
 
     now = time.time()
 
     if now - u["last_cake"] < 3600:
 
-        rem = int((3600 - (now - u["last_cake"])) / 60)
+        rem = int(
+            (3600 - (now - u["last_cake"])) / 60
+        )
 
         return await m.reply(
-            f"⏳ Твои щечки еще не готовы! Жди {rem} мин."
+            f"⏳ Твои щечки еще не готовы! "
+            f"Жди {rem} мин."
         )
 
     if uid == OWNER_ID:
@@ -192,51 +277,74 @@ async def cmd_cake(m: types.Message):
 
     await m.reply(
         f"🍰 <b>Мягкость щечек выросла!</b>\n"
-        f"Результат: <b>+{growth} ед.</b> "
-        f"(Всего: {u['softness']})",
+        f"Результат: <b>+{growth} ед.</b>\n"
+        f"☁️ Всего: <b>{u['softness']}</b>",
         parse_mode="HTML"
     )
 
-# --- /give ---
+# =========================================================
+# /give
+# =========================================================
+
 
 @dp.message(Command("give"))
 async def cmd_give(m: types.Message):
 
-    # 🔒 ТОЛЬКО ВЛАДЕЛЕЦ
     if m.from_user.id != OWNER_ID:
-        return  # молча игнор
+        return
 
     if not m.reply_to_message:
-        return await m.reply("❌ Ответь на сообщение пользователя")
+
+        return await m.reply(
+            "❌ Ответь на сообщение пользователя"
+        )
 
     try:
+
         amount = int(m.text.split()[1])
+
     except:
-        return await m.reply("❌ Формат: /give 100")
+
+        return await m.reply(
+            "❌ Формат: /give 100"
+        )
 
     target = m.reply_to_message.from_user
-    u = db.get_u(target.id, target.full_name)
+
+    u = db.get_u(
+        target.id,
+        target.full_name
+    )
 
     u["softness"] += amount
 
     db.save_local()
+
     await db.backup(bot)
 
     await m.reply(
-        f"🌸 Вагурочка подарила {target.mention_html()} "
+        f"🌸 Вагурочка подарила "
+        f"{target.mention_html()} "
         f"<b>+{amount}</b> мягкости!\n"
-        f"☁️ Теперь у него: <b>{u['softness']}</b>",
+        f"☁️ Теперь у него: "
+        f"<b>{u['softness']}</b>",
         parse_mode="HTML"
     )
 
-# --- /profile ---
+# =========================================================
+# /profile
+# =========================================================
+
 
 @dp.message(Command("profile"))
 async def cmd_profile(m: types.Message):
 
     uid = m.from_user.id
 
-    u = db.get_u(uid, m.from_user.full_name)
+    u = db.get_u(
+        uid,
+        m.from_user.full_name
+    )
 
     role = (
         "👑 Создатель"
@@ -248,51 +356,79 @@ async def cmd_profile(m: types.Message):
         )
     )
 
-    res = (
+    text = (
         f"<b>『 🌸 Профиль 』</b>\n\n"
         f"👤 <b>Имя:</b> {u['name']}\n"
         f"🎖 <b>Статус:</b> {role}\n"
-        f"☁️ <b>Мягкость:</b> {u['softness']} ед.\n"
-        f"⚠️ <b>Варны:</b> {u['warns']}/3"
+        f"☁️ <b>Мягкость:</b> "
+        f"{u['softness']} ед.\n"
+        f"⚠️ <b>Варны:</b> "
+        f"{u['warns']}/3"
     )
 
-    await m.reply(res, parse_mode="HTML")
+    await m.reply(
+        text,
+        parse_mode="HTML"
+    )
 
-# --- /top ---
+# =========================================================
+# /top
+# =========================================================
+
 
 @dp.message(Command("top"))
 async def cmd_top(m: types.Message):
 
     top = sorted(
         db.data["users"].items(),
-        key=lambda x: x[1]['softness'],
+        key=lambda x: x[1]["softness"],
         reverse=True
     )[:10]
 
-    res = "<b>☁️ Топ Самых Мягких Щечек:</b>\n\n"
+    text = (
+        "<b>☁️ Топ Самых Мягких Щечек:</b>\n\n"
+    )
 
-    for i, (uid_s, d) in enumerate(top, 1):
+    for i, (_, data) in enumerate(top, 1):
 
-        res += f"{i}. {d['name']} — <b>{d['softness']}</b>\n"
+        text += (
+            f"{i}. {data['name']} — "
+            f"<b>{data['softness']}</b>\n"
+        )
 
-    await m.answer(res, parse_mode="HTML")
+    await m.answer(
+        text,
+        parse_mode="HTML"
+    )
 
-# --- /rp ---
+# =========================================================
+# /rp
+# =========================================================
+
 
 @dp.message(Command("rp"))
 async def cmd_rp(m: types.Message):
 
-    res = "<b>🌸 RP команды:</b>\n\n"
+    text = "<b>🌸 RP команды:</b>\n\n"
 
     for k in RP_MAP.keys():
 
-        res += f"• {k}\n"
+        text += f"• {k}\n"
 
-    res += "\nОтветь на сообщение и напиши действие 💬"
+    text += (
+        "\nОтветь на сообщение "
+        "и напиши действие 💬"
+    )
 
-    await m.answer(res, parse_mode="HTML")
+    await m.answer(
+        text,
+        parse_mode="HTML"
+    )
 
-# --- ТЕКСТОВАЯ ЛОГИКА ---
+# =========================================================
+# TEXT LOGIC
+# =========================================================
+
 
 @dp.message(F.text)
 async def text_logic(m: types.Message):
@@ -301,11 +437,22 @@ async def text_logic(m: types.Message):
 
     txt = m.text.lower().strip()
 
-    u = db.get_u(uid, m.from_user.full_name)
+    db.get_u(
+        uid,
+        m.from_user.full_name
+    )
+
+    # =====================================================
+    # ТОРТИК
+    # =====================================================
 
     if txt == "тортик":
 
         return await cmd_cake(m)
+
+    # =====================================================
+    # РАЗБАН ПО ID
+    # =====================================================
 
     if txt.startswith("разбан ") and (
         uid in db.data["admins"]
@@ -323,7 +470,8 @@ async def text_logic(m: types.Message):
             )
 
             return await m.answer(
-                f"🔓 Пользователь {t_id} разбанен!"
+                f"🔓 Пользователь "
+                f"{t_id} разбанен!"
             )
 
         except:
@@ -332,195 +480,248 @@ async def text_logic(m: types.Message):
                 "❌ Формат: разбан [ID]"
             )
 
-    if m.reply_to_message:
+    # =====================================================
+    # REPLY COMMANDS
+    # =====================================================
 
-        target = m.reply_to_message.from_user
+    if not m.reply_to_message:
+        return
 
-        t_u = db.get_u(
-            target.id,
-            target.full_name
-        )
+    target = m.reply_to_message.from_user
 
-        if uid in db.data["admins"] or uid == OWNER_ID:
+    t_u = db.get_u(
+        target.id,
+        target.full_name
+    )
+
+    # =====================================================
+    # RP ACTIONS
+    # =====================================================
+
+    if txt in RP_MAP:
+
+        try:
+
+            async with aiohttp.ClientSession() as sess:
+
+                async with sess.get(
+                    f"https://nekos.best/api/v2/"
+                    f"{RP_MAP[txt]}"
+                ) as r:
+
+                    data = await r.json()
+
+                    url = data["results"][0]["url"]
+
+                    await m.answer_animation(
+                        animation=url,
+                        caption=(
+                            f"🌸 "
+                            f"{m.from_user.mention_html()} "
+                            f"{txt} "
+                            f"{target.mention_html()}!"
+                        ),
+                        parse_mode="HTML"
+                    )
+
+                    return
+
+        except Exception as e:
+
+            print(f"RP ERROR: {e}")
 
             try:
 
-                if txt == "размут":
-
-                    await bot.restrict_chat_member(
-                        m.chat.id,
-                        target.id,
-                        ChatPermissions(
-                            can_send_messages=True,
-                            can_send_other_messages=True,
-                            can_add_web_page_previews=True
-                        )
-                    )
-
-                    return await m.answer(
-                        f"🔊 {target.first_name} размучен!"
-                    )
-
-                if txt == "разбан":
-
-                    await bot.unban_chat_member(
-                        m.chat.id,
-                        target.id,
-                        only_if_banned=True
-                    )
-
-                    return await m.answer(
-                        f"🔓 {target.first_name} разбанен!"
-                    )
-
-                if txt == "мут":
-
-                    await bot.restrict_chat_member(
-                        m.chat.id,
-                        target.id,
-                        ChatPermissions(
-                            can_send_messages=False
-                        ),
-                        until_date=timedelta(minutes=15)
-                    )
-
-                    return await m.answer(
-                        f"🔇 {target.first_name} "
-                        f"замолчал на 15 мин."
-                    )
-
-                if txt == "варн":
-
-                    t_u["warns"] += 1
-
-                    if t_u["warns"] >= 3:
-
-                        await bot.ban_chat_member(
-                            m.chat.id,
-                            target.id
-                        )
-
-                        t_u["warns"] = 0
-
-                        db.save_local()
-
-                        await db.backup(bot)
-
-                        return await m.answer(
-                            f"👞 {target.first_name} "
-                            f"забанен за 3 варна!"
-                        )
-
-                    db.save_local()
-
-                    await db.backup(bot)
-
-                    return await m.answer(
-                        f"⚠️ Варн {target.first_name}! "
-                        f"[{t_u['warns']}/3]"
-                    )
-
-                if txt == "бан":
-
-                    await bot.ban_chat_member(
-                        m.chat.id,
-                        target.id
-                    )
-
-                    return await m.answer(
-                        f"👞 {target.first_name} изгнан!"
-                    )
-
-                if txt == "кик":
-
-                    await bot.ban_chat_member(
-                        m.chat.id,
-                        target.id
-                    )
-
-                    await bot.unban_chat_member(
-                        m.chat.id,
-                        target.id
-                    )
-
-                    return await m.answer(
-                        f"👞 {target.first_name} кикнут!"
-                    )
-
-                if txt == "+админ" and uid == OWNER_ID:
-
-                    if target.id not in db.data["admins"]:
-
-                        db.data["admins"].append(target.id)
-
-                        db.save_local()
-
-                        await db.backup(bot)
-
-                    return await m.answer(
-                        f"💎 {target.first_name} теперь Админ!"
-                    )
-
-            except Exception as e:
-
-                return await m.reply(
-                    f"❌ Ошибка прав: {e}"
-                )
-
-if txt in RP_MAP:
-    try:
-        async with aiohttp.ClientSession() as sess:
-            async with sess.get(f"https://nekos.best{RP_MAP[txt]}") as r:
-                data = await r.json()
-                url = data["results"][0]["url"]
-                
-                # Отправка сообщения должна быть ВНУТРИ try, 
-                # чтобы использовать полученный url
-                await m.answer_animation(
-                    url,
+                await m.answer_photo(
+                    "https://i.imgur.com/8Km9tLL.jpg",
                     caption=(
                         f"🌸 "
-                        f"{m.from_user.mention_html()} "
+                        f"{m.from_user.first_name} "
                         f"{txt} "
-                        f"{target.mention_html()}!"
-                    ),
-                    parse_mode="HTML"
+                        f"{target.first_name}!"
+                    )
                 )
-    except Exception as e:
-        print(f"Ошибка при запросе к API или отправке: {e}")
 
+                return
 
-        # 🔥 запасной вариант если API упал
-        try:
+            except:
 
-            await m.answer_photo(
-                "https://i.imgur.com/8Km9tLL.jpg",
-                caption=(
+                await m.answer(
                     f"🌸 "
                     f"{m.from_user.first_name} "
                     f"{txt} "
                     f"{target.first_name}!"
                 )
+
+                return
+
+    # =====================================================
+    # ADMIN COMMANDS
+    # =====================================================
+
+    if uid not in db.data["admins"] and uid != OWNER_ID:
+        return
+
+    try:
+
+        # =========================
+        # РАЗМУТ
+        # =========================
+
+        if txt == "размут":
+
+            await bot.restrict_chat_member(
+                m.chat.id,
+                target.id,
+                ChatPermissions(
+                    can_send_messages=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True
+                )
             )
 
-        except:
-
-            await m.answer(
-                f"🌸 {m.from_user.first_name} "
-                f"{txt} "
-                f"{target.first_name}!"
+            return await m.answer(
+                f"🔊 {target.first_name} размучен!"
             )
 
-# --- КОМАНДЫ БОТА ---
+        # =========================
+        # РАЗБАН
+        # =========================
 
-await bot.set_my_commands([
-    BotCommand(command="cake", description="Тортик"),
-    BotCommand(command="profile", description="Профиль"),
-    BotCommand(command="top", description="Топ мягкости"),
-    BotCommand(command="rp", description="Список RP команд"),
-])
+        if txt == "разбан":
 
-# --- ПРИВЕТСТВИЕ ---
+            await bot.unban_chat_member(
+                m.chat.id,
+                target.id,
+                only_if_banned=True
+            )
+
+            return await m.answer(
+                f"🔓 {target.first_name} разбанен!"
+            )
+
+        # =========================
+        # МУТ
+        # =========================
+
+        if txt == "мут":
+
+            await bot.restrict_chat_member(
+                m.chat.id,
+                target.id,
+                ChatPermissions(
+                    can_send_messages=False
+                ),
+                until_date=timedelta(minutes=15)
+            )
+
+            return await m.answer(
+                f"🔇 {target.first_name} "
+                f"замолчал на 15 мин."
+            )
+
+        # =========================
+        # ВАРН
+        # =========================
+
+        if txt == "варн":
+
+            t_u["warns"] += 1
+
+            if t_u["warns"] >= 3:
+
+                await bot.ban_chat_member(
+                    m.chat.id,
+                    target.id
+                )
+
+                t_u["warns"] = 0
+
+                db.save_local()
+
+                await db.backup(bot)
+
+                return await m.answer(
+                    f"👞 {target.first_name} "
+                    f"забанен за 3 варна!"
+                )
+
+            db.save_local()
+
+            await db.backup(bot)
+
+            return await m.answer(
+                f"⚠️ Варн "
+                f"{target.first_name}! "
+                f"[{t_u['warns']}/3]"
+            )
+
+        # =========================
+        # БАН
+        # =========================
+
+        if txt == "бан":
+
+            await bot.ban_chat_member(
+                m.chat.id,
+                target.id
+            )
+
+            return await m.answer(
+                f"👞 {target.first_name} изгнан!"
+            )
+
+        # =========================
+        # КИК
+        # =========================
+
+        if txt == "кик":
+
+            await bot.ban_chat_member(
+                m.chat.id,
+                target.id
+            )
+
+            await bot.unban_chat_member(
+                m.chat.id,
+                target.id
+            )
+
+            return await m.answer(
+                f"👞 {target.first_name} кикнут!"
+            )
+
+        # =========================
+        # +АДМИН
+        # =========================
+
+        if txt == "+админ" and uid == OWNER_ID:
+
+            if target.id not in db.data["admins"]:
+
+                db.data["admins"].append(
+                    target.id
+                )
+
+                db.save_local()
+
+                await db.backup(bot)
+
+            return await m.answer(
+                f"💎 {target.first_name} "
+                f"теперь Админ!"
+            )
+
+    except Exception as e:
+
+        return await m.reply(
+            f"❌ Ошибка прав: {e}"
+        )
+
+# =========================================================
+# WELCOME
+# =========================================================
+
 
 @dp.message(F.new_chat_members)
 async def welcome_bot(m: types.Message):
@@ -532,12 +733,16 @@ async def welcome_bot(m: types.Message):
 
         await m.answer(
             f"🌸 Привет, "
-            f"{mem.mention_html()}! "
-            f"Я Вагури. Попробуй /cake!",
+            f"{mem.mention_html()}!\n"
+            f"Я Вагури. "
+            f"Попробуй /cake 🍰",
             parse_mode="HTML"
         )
 
-# --- MAIN ---
+# =========================================================
+# MAIN
+# =========================================================
+
 
 async def main():
 
@@ -556,7 +761,9 @@ async def main():
         skip_updates=True
     )
 
-# --- ЗАПУСК ---
+# =========================================================
+# START
+# =========================================================
 
 if __name__ == "__main__":
 
