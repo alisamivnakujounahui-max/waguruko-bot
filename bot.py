@@ -193,16 +193,86 @@ dp = Dispatcher()
 # =========================================================
 
 RP_MAP = {
-    "обнять": "hug",
-    "поцеловать": "kiss",
-    "кусь": "bite",
-    "гладить": "pat",
-    "уебать": "slap",
-    "тык": "poke",
-    "лизнуть": "lick",
-    "прижаться": "cuddle",
-    "потискать": "cuddle",
-    "танцевать": "dance"
+
+    "обнять": {
+        "api": "hug",
+        "text": "нежно обнял(а)"
+    },
+
+    "поцеловать": {
+        "api": "kiss",
+        "text": "поцеловал(а)"
+    },
+
+    "кусь": {
+        "api": "bite",
+        "text": "кусьнул(а)"
+    },
+
+    "гладить": {
+        "api": "pat",
+        "text": "погладил(а)"
+    },
+
+    "уебать": {
+        "api": "slap",
+        "text": "жестко уебал(а)"
+    },
+
+    "тык": {
+        "api": "poke",
+        "text": "тыкнул(а)"
+    },
+
+    "лизнуть": {
+        "api": "lick",
+        "text": "лизнул(а)"
+    },
+
+    "прижаться": {
+        "api": "cuddle",
+        "text": "прижался(ась) к"
+    },
+
+    "потискать": {
+        "api": "cuddle",
+        "text": "затискал(а)"
+    },
+
+    "танцевать": {
+        "api": "dance",
+        "text": "танцует с"
+    },
+
+    "держать": {
+        "api": "handhold",
+        "text": "взял(а) за руку"
+    },
+
+    "спать": {
+        "api": "sleep",
+        "text": "уснул(а) рядом с"
+    },
+
+    "смущать": {
+        "api": "blush",
+        "text": "засмущал(а)"
+    },
+
+    "кормить": {
+        "api": "feed",
+        "text": "кормит"
+    },
+
+    "флирт": {
+        "api": "smile",
+        "text": "флиртует с"
+    },
+
+    "убить": {
+        "api": "kick",
+        "text": "уничтожил(а)"
+    }
 }
 
 # =========================================================
@@ -506,7 +576,7 @@ async def text_logic(m: types.Message):
 
                 async with sess.get(
                     f"https://nekos.best/api/v2/"
-                    f"{RP_MAP[txt]}"
+                    f"{RP_MAP[txt]['api']}"
                 ) as r:
 
                     data = await r.json()
@@ -518,13 +588,42 @@ async def text_logic(m: types.Message):
                         caption=(
                             f"🌸 "
                             f"{m.from_user.mention_html()} "
-                            f"{txt} "
+                            f"{RP_MAP[txt]['text']} "
                             f"{target.mention_html()}!"
                         ),
                         parse_mode="HTML"
                     )
 
                     return
+
+        except Exception as e:
+
+            print(f"RP ERROR: {e}")
+
+            try:
+
+                await m.answer_photo(
+                    "https://i.imgur.com/8Km9tLL.jpg",
+                    caption=(
+                        f"🌸 "
+                        f"{m.from_user.first_name} "
+                        f"{RP_MAP[txt]['text']} "
+                        f"{target.first_name}!"
+                    )
+                )
+
+                return
+
+            except:
+
+                await m.answer(
+                    f"🌸 "
+                    f"{m.from_user.first_name} "
+                    f"{RP_MAP[txt]['text']} "
+                    f"{target.first_name}!"
+                )
+
+                return
 
         except Exception as e:
 
