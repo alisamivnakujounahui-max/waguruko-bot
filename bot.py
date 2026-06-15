@@ -18,7 +18,6 @@ from aiogram.types import (
     ChatPermissions,
     FSInputFile
 )
-from aiogram.methods import GetChatHistory
 
 # =========================================================
 # НАСТРОЙКИ
@@ -80,12 +79,21 @@ class Database:
     async def restore_from_tg(self, bot_instance):
         """Скачивание базы из ТГ приватного канала при перезапуске на Render"""
         try:
+            # Получаем ID канала
             chat = await bot_instance.get_chat(BACKUP_CHANNEL)
-            history = await bot_instance(GetChatHistory(chat_id=chat.id, limit=30))
+            
+            # Делаем сырой вызов метода getChatHistory без импортов!
+            history = await bot_instance.session.make_request(
+                token=bot_instance.token,
+                method="getChatHistory",
+                params={"chat_id": chat.id, "limit": 30}
+            )
             
             messages = []
-            if history and history.messages:
-                for msg in history.messages:
+            if history and "messages" in history:
+                for msg_data in history["messages"]:
+                    # Превращаем сырой JSON в объект aiogram Message
+                    msg = types.Message(**msg_data)
                     if msg.document and msg.document.file_name == self.db_path:
                         messages.append(msg)
             
@@ -513,7 +521,7 @@ async def text_logic(m: types.Message):
         print(f"Ошибка прав: {e}")
 
 # =========================================================
-# ЗАПУСК
+# ЗАПУСК БОТА
 # =========================================================
 
 @dp.message(F.new_chat_members)
@@ -526,7 +534,7 @@ async def welcome_bot(m: types.Message):
 async def main():
     keep_alive()
     
-    # 1. Сначала инициализируем структуру таблиц в локальном файле
+    # 1. Инициализируем локальную структуру SQLite
     await db_manager.init_db()
     
     try:
@@ -544,7 +552,7 @@ async def main():
     # 4. Настраиваем кнопки команд меню
     await set_commands(bot)
     
-    # 5. Включаем постоянное чтение чатов
+    # 5. Включаем лонг-поллинг
     print("🚀 Вагурочка успешно запустила лонг-поллинг!")
     await dp.start_polling(bot, skip_updates=True)
 
