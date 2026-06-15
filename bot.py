@@ -77,18 +77,27 @@ class Database:
             await db.commit()
 
     async def restore_from_tg(self, bot_instance):
+        """Скачивание базы из ТГ приватного канала при перезапуске на Render"""
         try:
+            # Используем универсальный метод получения чата, чтобы aiogram «увидел» канал
+            chat = await bot_instance.get_chat(BACKUP_CHANNEL)
+            
             messages = []
-            async for msg in bot_instance.get_chat_history(BACKUP_CHANNEL, limit=30):
+            # Ищем последнее сообщение с файлом базы данных в канале
+            async for msg in bot_instance.get_chat_history(chat.id, limit=30):
                 if msg.document and msg.document.file_name == self.db_path:
                     messages.append(msg)
-            if not messages: return
+            
+            if not messages:
+                print("ℹ️ Бэкап в канале не найден, создаю новую чистую базу.")
+                return
+                
             latest_msg = messages[0]
             file_info = await bot_instance.get_file(latest_msg.document.file_id)
             await bot_instance.download_file(file_info.file_path, self.db_path)
-            print("🌟 БАЗА ДАННЫХ ВОССТАНОВЛЕНА!")
+            print("🌟 БАЗА ДАННЫХ УСПЕШНО ВОССТАНОВЛЕНА ИЗ КАНАЛА!")
         except Exception as e:
-            print(f"Ошибка восстановления базы: {e}")
+            print(f"❌ Ошибка восстановления базы: {e}")
 
     async def save_and_backup(self, bot_instance):
         try:
