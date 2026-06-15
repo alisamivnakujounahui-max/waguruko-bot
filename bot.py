@@ -18,6 +18,7 @@ from aiogram.types import (
     ChatPermissions,
     FSInputFile
 )
+from aiogram.methods import GetChatHistory
 
 # =========================================================
 # НАСТРОЙКИ
@@ -30,7 +31,7 @@ DB_FILE = "waguruko_v2.db"
 
 logging.basicConfig(level=logging.INFO)
 
-# Хранилище для предложений брака: {когда_спросили: {"proposer": id, "target": id, "time": timestamp}}
+# Хранилище для предложений брака
 pending_marriages = {}
 
 app = Flask("")
@@ -79,18 +80,14 @@ class Database:
     async def restore_from_tg(self, bot_instance):
         """Скачивание базы из ТГ приватного канала при перезапуске на Render"""
         try:
-            # Получаем объект чата канала
             chat = await bot_instance.get_chat(BACKUP_CHANNEL)
-            
-            # Используем правильный метод GetChatHistory напрямую через метод bot_instance
-            from aiogram.methods import GetChatHistory
-            
             history = await bot_instance(GetChatHistory(chat_id=chat.id, limit=30))
             
             messages = []
-            for msg in history.messages:
-                if msg.document and msg.document.file_name == self.db_path:
-                    messages.append(msg)
+            if history and history.messages:
+                for msg in history.messages:
+                    if msg.document and msg.document.file_name == self.db_path:
+                        messages.append(msg)
             
             if not messages:
                 print("ℹ️ Бэкап в канале не найден, создаю новую чистую базу.")
@@ -174,10 +171,8 @@ class Database:
                 return await cursor.fetchone()
 
     async def get_all_marriages(self):
-        """Получить уникальные пары для списка женатых"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            # Выбираем пары так, чтобы u1.uid < u2.uid, чтобы не дублировать (ведь в базе лежат связи в обе стороны)
             async with db.execute("""
                 SELECT u1.name as name1, u2.name as name2, m.marriage_date 
                 FROM marriages m
@@ -240,7 +235,7 @@ async def set_commands(bot_instance):
     ])
 
 # =========================================================
-# ЛОГИКА БРАКОСОЧЕТАНИЯ С СОГЛАСИЕМ
+# ЛОГИКА БРАКОСОЧЕТАНИЯ
 # =========================================================
 
 async def ask_marriage(m: types.Message):
@@ -254,7 +249,6 @@ async def ask_marriage(m: types.Message):
     if await db_manager.get_marriage(p1.id): return await m.reply("❌ Ты уже состоишь в браке! Сначала разведись.")
     if await db_manager.get_marriage(p2.id): return await m.reply("❌ Этот человек уже занят!")
 
-    # Записываем предложение (ключ — ID чата, чтобы отслеживать в нужной группе)
     chat_id = m.chat.id
     pending_marriages[chat_id] = {
         "proposer_id": p1.id,
@@ -275,13 +269,10 @@ async def check_marriage_agreement(m: types.Message):
     if chat_id not in pending_marriages: return
 
     offer = pending_marriages[chat_id]
-    
-    # Проверяем, не истекло ли время (60 секунд)
     if time.time() - offer["time"] > 60:
         del pending_marriages[chat_id]
         return
 
-    # Ответить должен именно тот, кому предложили
     if m.from_user.id != offer["target_id"]: return
 
     txt = m.text.lower().strip()
@@ -396,12 +387,10 @@ async def text_logic(m: types.Message):
 
     u_sender = await db_manager.get_user(uid, m.from_user.full_name)
 
-    # Проверка согласия на брак
     if txt in ["согласен", "согласна", "да"] and m.reply_to_message:
         await check_marriage_agreement(m)
         return
 
-    # Быстрые слова
     if txt == "тортик":
         u = await db_manager.get_user(m.from_user.id, m.from_user.full_name)
         now = time.time()
@@ -440,7 +429,6 @@ async def text_logic(m: types.Message):
     target = m.reply_to_message.from_user
     t_u = await db_manager.get_user(target.id, target.full_name)
 
-    # Репутация
     if txt in ["+", "респект", "спс", "спасибо", "лайк"]:
         if uid == target.id: return
         now = time.time()
@@ -451,7 +439,6 @@ async def text_logic(m: types.Message):
         await db_manager.save_and_backup(bot)
         return await m.reply(f"⭐️ {m.from_user.first_name} поднял авторитет {target.first_name}! (Всего: <b>{new_rep}</b>)", parse_mode="HTML")
 
-    # RP действия
     if txt in RP_MAP:
         try:
             async with aiohttp.ClientSession() as sess:
@@ -467,7 +454,6 @@ async def text_logic(m: types.Message):
             await m.answer(f"{RP_MAP[txt]['emoji']} <b>{m.from_user.first_name}</b> {RP_MAP[txt]['text']} <b>{target.first_name}</b>!", parse_mode="HTML")
             return
 
-    # Модерация
     is_mod = u_sender["status"] in ["moderator", "admin", "owner"] or uid == OWNER_ID
     if not is_mod: return
 
@@ -539,10 +525,27 @@ async def welcome_bot(m: types.Message):
 
 async def main():
     keep_alive()
+    
+    # 1. Сначала инициализируем структуру таблиц в локальном файле
     await db_manager.init_db()
-    await db_manager.restore_from_tg(bot)
-    await bot.delete_webhook(drop_pending_updates=True)
+    
+    try:
+        # 2. Сбрасываем старые зависшие сессии, убирая TelegramConflictError
+        await bot.delete_webhook(drop_pending_updates=True)
+        print("🧹 Старые сессии Telegram сброшены.")
+        
+        # 3. Восстанавливаем базу данных из приватного ТГ-канала
+        print("🔄 Попытка восстановить базу данных из Telegram...")
+        await db_manager.restore_from_tg(bot)
+        
+    except Exception as e:
+        print(f"⚠️ Ошибка на этапе подготовки базы: {e}")
+
+    # 4. Настраиваем кнопки команд меню
     await set_commands(bot)
+    
+    # 5. Включаем постоянное чтение чатов
+    print("🚀 Вагурочка успешно запустила лонг-поллинг!")
     await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
