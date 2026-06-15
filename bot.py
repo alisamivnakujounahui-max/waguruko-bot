@@ -79,12 +79,16 @@ class Database:
     async def restore_from_tg(self, bot_instance):
         """Скачивание базы из ТГ приватного канала при перезапуске на Render"""
         try:
-            # Используем универсальный метод получения чата, чтобы aiogram «увидел» канал
+            # Получаем объект чата канала
             chat = await bot_instance.get_chat(BACKUP_CHANNEL)
             
+            # Используем правильный метод GetChatHistory напрямую через метод bot_instance
+            from aiogram.methods import GetChatHistory
+            
+            history = await bot_instance(GetChatHistory(chat_id=chat.id, limit=30))
+            
             messages = []
-            # Ищем последнее сообщение с файлом базы данных в канале
-            async for msg in bot_instance.get_chat_history(chat.id, limit=30):
+            for msg in history.messages:
                 if msg.document and msg.document.file_name == self.db_path:
                     messages.append(msg)
             
